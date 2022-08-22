@@ -139,3 +139,33 @@ class FindCommutingPauliEvolutions(TransformationPass):
             sub_dag.apply_operation_back(pauli_2q, qubits)
 
         return sub_dag
+
+class ReplaceCommutingPauliEvolutions(FindCommutingPauliEvolutions):
+
+    def run(self, dag: DAGCircuit) -> DAGCircuit:
+        """Version of `run` method from :class:`.FindCommutingPauliEvolutions` where all summands commute.
+        The pass does not check for commuting two-qubit Paulis but only replaces them with :class:`.Commuting2qBlocks``
+        gate instructions directly.
+
+        Args:
+            The DAG circuit in which to replace the commuting evolutions with :class:`.Commuting2qBlocks``.
+
+        Returns:
+            The dag in which :class:`.PauliEvolutionGate`s made of commuting two-qubit Paulis
+            have been replaced with :class:`.Commuting2qBlocks`` gate instructions. These gates
+            contain nodes of two-qubit :class:`.PauliEvolutionGate`s.
+        """
+
+        for node in dag.op_nodes():
+            if isinstance(node.op, PauliEvolutionGate):
+                operator = node.op.operator
+                if self.single_qubit_terms_only(operator):
+                    continue
+
+                sub_dag = self._decompose_to_2q(dag, node.op)
+
+                block_op = Commuting2qBlock(set(sub_dag.op_nodes()))
+                wire_order = {wire: idx for idx, wire in enumerate(dag.qubits)}
+                dag.replace_block_with_op([node], block_op, wire_order)
+
+        return dag
